@@ -2,42 +2,45 @@ require'luarocks.require'
 require'lpeg'
 
 s = [[
-
-%[-------1 before
-	%[ 2 inner test ]%
-	after----]%
-	
-	%[ 3 standalone test  ]%
+	 %[ one
+     %[ two ]%
+     %[ three 
+             %[ four ]%
+          five ]%
+      six ]%
 
 ]]
 
 
-local template = {}
+local C, Ct, P, R, S, V = lpeg.C, lpeg.Ct, lpeg.P, lpeg.R, lpeg.S, lpeg.V
+local SPACE	= S" \t\r\f\n"^0
+local OPEN	= P"%["
+local CLOSE	= P"]%"
+local ITEM, NONITEM, FACE, CONTENT = V'ITEM', V'NONITEM', V'FACE', V'CONTENT'
 
-local content=function(content, ...)
-	local t = {...}
-	print(content)
-	if #t > 0 then
-		print'###########'
-		print('[', string.sub(content, t[1], t[2]), ']')
-	end
-end 
 
-local WHITESPACE = lpeg.S'\f \t\r\n'
-
-local NUM = lpeg.R'09'
-
-local SPACE = (WHITESPACE^0)
-
-local OP = lpeg.P'%['
-local CL = lpeg.P']%'
-
-local CONTENT, ITEM, DEF = lpeg.V'CONTENT', lpeg.V'ITEM', lpeg.V'DEF'
-
-local TEMPLATE = lpeg.P{
-	CONTENT,
-	CONTENT	= SPACE * ((1-(OP+CL))^1 + ITEM )^1 * SPACE,
-	ITEM  = lpeg.Cp() * OP * (lpeg.C(CONTENT) / content )* CL * lpeg.Cp()
+local GRAMMAR = P{ FACE;
+	ITEM    = OPEN * CONTENT * CLOSE,
+	NONITEM = C((1-(OPEN + CLOSE))^1),
+	CONTENT = (NONITEM + ITEM)^1,
+	FACE = Ct( CONTENT )
 }
 
-lpeg.match(TEMPLATE, s)
+t = GRAMMAR:match(s)
+
+local function print_a(t)
+ io.write"{"
+ for i, v in ipairs(t) do
+   if type(v) == "table" then
+     print_a(v)
+   else
+     io.write(("%q"):format(v))
+   end
+   if t[i + 1] then
+     io.write", "
+   end
+ end
+ io.write"}"
+end
+
+print_a(t)
