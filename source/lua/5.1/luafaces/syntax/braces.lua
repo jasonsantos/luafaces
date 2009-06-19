@@ -181,7 +181,7 @@ end
 
 -- Tokens
 
-local WHITESPACE = lpeg.S'\f \t\r\n'
+local WHITESPACE = lpeg.S'\f \t\r\n'^0
 
 local NUM = lpeg.R'09'
 local NAMESTARTCHAR	= lpeg.R"AZ" + "_" + lpeg.R"az"

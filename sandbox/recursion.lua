@@ -36,7 +36,7 @@ local function print_a(t)
    else
      io.write(("%q"):format(v))
    end
-   if t[i + 1] then
+   if tonumber(i) and t[i + 1] then
      io.write", "
    end
  end

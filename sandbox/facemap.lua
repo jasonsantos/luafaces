@@ -149,7 +149,7 @@ table.foreach(FACES, function(k,thisNode)
 	table.foreach(thisNode.uses or {}, registerUse)
 	
 	-- TODO: add a more sophisticated detection whether this node is free
-	if #thisNode['.deps'] <= 0 then
+	if not thisNode['.deps'] or #thisNode['.deps'] <= 0 then
 		table.insert(FREE, thisNode)
 	end
 end)
@@ -197,7 +197,7 @@ while #FREE > 0 do
 			DEPSFRO[name][targetnm] = nil
 		end
 	end
-	for name, node in pairs(DEPSFRO) do
+	for name, node in pairs(DEPSFRO or {}) do
 		local nx = next(node) 
 		print('Node:', node)
 		if not nx then -- if all dependencies are cleared for him
