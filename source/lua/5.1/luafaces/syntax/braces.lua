@@ -181,7 +181,7 @@ end
 
 -- Tokens
 
-local WHITESPACE = lpeg.S'\f \t\r\n'^0
+local WHITESPACE = lpeg.S'\f \t\r\n'
 
 local NUM = lpeg.R'09'
 local NAMESTARTCHAR	= lpeg.R"AZ" + "_" + lpeg.R"az"
@@ -320,16 +320,16 @@ local SPECIALFUNCTION = lpeg.P"${@" * lpeg.C(NAME) * lpeg.P"[" * lpeg.C(FACEUSEN
 local OPENBRACKETS = lpeg.P"["^1 * lpeg.P"\n"^-1
 local OPENBRACES = lpeg.P"{"^1
 local CLOSEBRACES = lpeg.P"}"^1 -- TODO: add support for long braces
-local FACEDEFSTART = lpeg.P"${" * lpeg.C(FACENAME) * OPENBRACKETS
+local FACEDEFSTART = lpeg.P"${" * lpeg.Cg(FACENAME, 'facename') * OPENBRACKETS
 local FACEDEFEND = lpeg.P"]"^1 * "}" 
 
-local FACEUSESTART = lpeg.P"${" * lpeg.C(FACEUSENAME) * OPENBRACES
+local FACEUSESTART = lpeg.P"${" * lpeg.Cg(FACEUSENAME, 'faceusename') * OPENBRACES
 local FACEUSEEND = lpeg.P"}"^0 * "}" 
 
 -- Face Use Parameters
 local SPACE = (WHITESPACE^0)
 
-local SIMPLEFACEUSE = lpeg.P"${" * lpeg.C(FACEUSENAME) * "}" 
+local SIMPLEFACEUSE = lpeg.P"${" * lpeg.Cg(FACEUSENAME,'faceusename') * "}" 
 
 local STRING = (lpeg.P'"' * ( (lpeg.P'\\' * 1) + (1 - (lpeg.S'"\n\r\f')) )^0 * lpeg.P'"') +
   (lpeg.P"'" * ( (lpeg.P'\\' * 1) + (1 - (lpeg.S"'\n\r\f")) )^0 * lpeg.P"'")
@@ -340,34 +340,9 @@ local ATTR = FACEUSENAME * SPACE * "=" * SPACE * LITERAL
 
 local PARAMS = ATTR * ("," * ATTR)^0 
 
-local PARAMFACEUSE = lpeg.P"${" * lpeg.C(FACEUSENAME) * OPENBRACES * lpeg.C(PARAMS) * CLOSEBRACES * "}" 
+local PARAMFACEUSE = FACEUSESTART * lpeg.Cg(PARAMS, 'params') * CLOSEBRACES * "}" 
 
--- The grammar
-
-local TEMPLATE, FACEDEF, FACEUSE, CONTENT = lpeg.V'TEMPLATE', lpeg.V'FACEDEF', lpeg.V'FACEUSE', lpeg.V'CONTENT' 
-
-
-local TEMPLATE=lpeg.P{
-	TEMPLATE,
---[[
-	-- I could not make this work -- help, anyone?
-	FACEDEF = lpeg.P(function (s, i) -- function to make the multiple brackets syntax 
-		local bb = lpeg.match(FACEDEFSTART, s)
-		local bp = lpeg.match(OPENBRACKETS, s, bb)
-		if bp then
-			local endbracketslen = bp-bb
-			local p = lpeg.P(string.rep(']', endbracketslen) .. '}' )
-			p = (1 - p)^0 * p
-			return lpeg.match(p, s, bp)
-		end
-		return false
-	end),
-]]	
-	TEMPLATE=SPACE * (FACEDEF + CONTENT)^0,
-	FACEDEF = (FACEDEFSTART / faceopen * (lpeg.Cp() * lpeg.C(CONTENT)) / facecontent * FACEDEFEND / faceclose) ,
-	FACEUSE = PARAMFACEUSE + SIMPLEFACEUSE,
-	CONTENT = (FACEDEF + FACEUSE / faceuse + SPECIALFUNCTION / special  + (1 - (FACEDEFSTART + FACEDEFEND)) )^1 * SPACE,
-}
+local TEXT = lpeg.C((1-(FACEUSESTART+FACEUSEEND+FACEDEFSTART+FACEDEFEND))^1)
 
 s = [===[
 
@@ -386,7 +361,7 @@ ${d[
 ${@context[x]} 
 
 ${y[
-	isso é um outro teste, 
+	isso é um outro teste, ${e}
 	de um jeito 
 	bem legal
 	${z[
@@ -402,7 +377,33 @@ ${y}
 
 
 ]===]
+-- The grammar
 
-print(lpeg.match(TEMPLATE, s))
+local TEMPLATE, FACEDEF, FACEUSE, CONTENT = lpeg.V'TEMPLATE', lpeg.V'FACEDEF', lpeg.V'FACEUSE', lpeg.V'CONTENT' 
 
-print_r(faces)
+
+local TEMPLATE=lpeg.P{ TEMPLATE;
+	TEMPLATE =( FACEUSE + FACEDEF + TEXT )^1,
+	FACEDEF  = lpeg.Ct(FACEDEFSTART * TEMPLATE * FACEDEFEND),
+	FACEUSE  = SIMPLEFACEUSE + PARAMFACEUSE,
+}
+
+
+r = [==[ 
+
+ ${ack}
+
+${y[
+	isso é um outro teste, ${ett}
+	de um jeito 
+	bem legal
+	${z[
+	Com mais um tipo de coisa
+	]}
+]} ]==]
+
+
+
+
+t = {TEXT:match(r)}
+print_r(t)
