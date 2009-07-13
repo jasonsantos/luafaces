@@ -6,10 +6,11 @@ local type = type
 local tostring = tostring
 local next = next
 local pairs = pairs
+local ipairs = ipairs
 
-require'tools'
+require'util'
 
-local print_r = tools.print_r
+local print_r = util.print_r
 
 module'luafaces.mold'
 
@@ -25,25 +26,37 @@ repository = repository or setmetatable({}, {
 	end
 })
 
+local function iterate(key, fn)
+	if type(key)=='string' then
+		string.gsub(key, "[.]?([^.]*)[.]?", fn)
+	elseif type(key)=='table' then
+		for _, itemName in ipairs(key) do
+			fn(itemName)
+		end
+	end
+end
+
 function register(key, obj)
 	local o = moldsRepository or {}
-	string.gsub(key, "[.]?([^.]*)[.]?", function(itemName)
+	iterate(key, function(itemName)
 		if itemName ~= "" then
 			o[itemName] = o[itemName] or setmetatable({}, {__mode='k'})
 			o = o[itemName]
 		end
 	end)
 	o.item = obj
+	return obj
 end
 
 function find(key)
 	local o = moldsRepository or {}
-	string.gsub(key, "[.]?([^.]*)[.]?", function(itemName)
+	
+	iterate(key, function(itemName)
 		if itemName ~= "" and o then
 			o = o[itemName] or o["*"]
 		end
 	end)
-	
+		
 	return o and o.item or o
 end
 
@@ -51,7 +64,7 @@ end
 function unregister(key)
 	local o = moldsRepository or {}
 	local p, name
-	string.gsub(key, "[.]?([^.]*)[.]?", function(itemName)
+	iterate(key, function(itemName)
 		if itemName ~= "" and o then
 			p = o
 			name = itemName

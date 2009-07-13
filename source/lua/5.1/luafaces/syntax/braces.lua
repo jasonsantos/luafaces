@@ -1,6 +1,9 @@
----module(..., package.seeall)
-require'luarocks.require'
+pcall(require,'luarocks.require')
+module(..., package.seeall)
+
 local lpeg = require'lpeg'
+
+local tools = require "util"
 
 --[=[
 
@@ -129,15 +132,15 @@ When parsing faces and subfaces the engine changes context every time a new face
 
 --- external API
 
-onfacedef = function(context, facename, dependencies, templatetable)
+onfacedef = function(this, facename, dependencies, templatetable)
 	error'uninitialized face declaration event'
 end
 
-onfaceuse = function(context, facename, parameters)
+onfaceuse = function(facename, parameters)
 	error'uninitialized face use event'
 end
 
-onfacerender = function(context, facename, templatetable, data)
+onfacerender = function(this, facename, templatetable, data)
 	error'uninitialized face render event'
 end
 
@@ -145,210 +148,191 @@ onparsespecial = function(context, functionname)
 	error'uninitialized face render event'
 end
 
-
-function string.split (s, sep)
-  sep = lpeg.P(sep)
-  local elem = lpeg.C((1 - sep)^0)
-  local p = elem * (sep * elem)^0
-  return {lpeg.match(p, s)}
+onerror = function(context, functionname)
+	error'error during parsing'
 end
-
-function print_r (t, name, indent)
-  local tableList = {}
-  function table_r (t, name, indent, full)
-    local serial=string.len(full) == 0 and name
-        or type(name)~="number" and '["'..tostring(name)..'"]' or '['..name..']'
-    io.write(indent,serial,' = ') 
-    if type(t) == "table" then
-      if tableList[t] ~= nil then io.write('{}; -- ',tableList[t],' (self reference)\n')
-      else
-        tableList[t]=full..serial
-        if next(t) then -- Table not empty
-          io.write('{\n')
-          for key,value in pairs(t) do table_r(value,key,indent..'\t',full..serial) end 
-          io.write(indent,'};\n')
-        else io.write('{};\n') end
-      end
-    else io.write(type(t)~="number" and type(t)~="boolean" and '"'..tostring(t)..'"'
-                  or tostring(t),';\n') end
-  end
-  table_r(t,name or '__unnamed__',indent or '','')
-end
-
 
 -- internal parser
 -- -----------------------
 
+
+local T_FACEDEF = {'face definition'}
+local T_FACEUSE = {'face use'}
+local T_FACEFUNC = {'face special function'}
+
+local P, R, C, Ct, Cg, Cc, Cb, V, S = lpeg.P, lpeg.R, lpeg.C, lpeg.Ct, lpeg.Cg, lpeg.Cc, lpeg.Cb, lpeg.V, lpeg.S
+
+
 -- Tokens
 
-local WHITESPACE = lpeg.S'\f \t\r\n'
+local WHITESPACE = S'\f \t\r\n'
 
-local NUM = lpeg.R'09'
-local NAMESTARTCHAR	= lpeg.R"AZ" + "_" + lpeg.R"az"
+local NUM = R'09'
+local NAMESTARTCHAR	= R"AZ" + "_" + R"az"
 local NAMECHAR	= NAMESTARTCHAR + NUM
 local NAME = NAMESTARTCHAR * NAMECHAR^0 
-local DOT = lpeg.P"."
-local WILDCARD = lpeg.P"*" + "-"  
+local DOT = P"."
+local WILDCARD = P"*" + "-"  
 local FACENAME = (DOT^0 * (WILDCARD + NAME))^1  
 local FACEUSENAME = (DOT^0 * NAME)^1 
 
-local ALPHA =  lpeg.R('__','az','AZ','\127\255') 
+local ALPHA =  R('__','az','AZ','\127\255') 
 
 local ALPHANUM = ALPHA + NUM
 
-local NUMBER = (lpeg.P'.' + NUM)^1 * (lpeg.S'eE' * lpeg.S'+-'^-1)^-1 * (ALPHANUM)^0
-NUMBER = #(NUM + (lpeg.P'.' * NUM)) * NUMBER
+local NUMBER = (P'.' + NUM)^1 * (S'eE' * S'+-'^-1)^-1 * (ALPHANUM)^0
+NUMBER = #(NUM + (P'.' * NUM)) * NUMBER
 
--- variables
--- --------------
+-- Braces Syntax
 
-local faces = { _={} }
-local stack = { level = 0 }
-local context = { level = 0 }
-local stacks = { stack }
-local mainstack = stacks[ #stacks ]
-local currentFace = faces['_']
+local BRACES_SIMPLEUSE = P"${" * Cg(FACEUSENAME, 'tagname') * "}"
+local BRACES_OPENTAGDEF = P"${" * Cg(FACENAME, 'tagname') * "["
+local BRACES_CLOSETAGDEF = P']}'
 
-local templatestack = {}
+local BRACES_SPECIALFUNCTION = P"${" * "@" * Cg(NAME, 'function') * "[" * Cg(FACEUSENAME, 'parameter') * "]" * "}" 
 
-local specialFunctions = {
-	context = function(facename)
-		local newstack = string.split(facename, '.')  
-		newstack.level = #newstack
-		table.insert(stacks, newstack)
-		stack = stacks[#stacks]
-	end
-}
+-- Braces: Face Use Parameters
 
-
-local function fullName(facename, exclusive)
-	local namestack = stack
-	local t = {}
-	for k,v in ipairs(namestack) do
-		t[k] =v
-	end
-	local splitname = string.split(facename, '.')
-	for _, namepart in ipairs(splitname) do
-		table.insert(t, namepart)
-	end
-	if exclusive then
-		table.remove(t, #t)
-	end
-	return table.concat(t, '.'), splitname
-end
-
-local N = fullName
-
--- TODO: rewrite to a better, closure-based parser
-
---- pushes the facename to the control stacks of the parser
-local function pushname(facename)
-	local fullname, splitname = N(facename)
-	for _, namepart in ipairs(splitname) do
-		table.insert(stack, namepart)
-		stack.level = stack.level + 1
-	end
-	-- sets the control reference variables to the right face
-	faces[fullname] = faces[fullname] or {
-		['.type']='face',
-		['fullname']=fullname,
-		['facename'] = stack[#stack],
-	} -- creates a new face if necessary -- TODO: use the 'create new face 'API
-	local lastFace = currentFace
-	currentFace = faces[fullname]
-	currentFace.lastFace = lastFace
-end
-
-
-local function popname(facename)
-	local fullname, splitname = N(facename, true)
-	for _, namepart in ipairs(splitname) do
-		if stack.level < 1 then
-			table.remove(stacks, #stacks)
-			stack = stacks[#stacks]
-		else
-			table.remove(stack, #stack)
-			stack.level = stack.level - 1
-		end
-	end
-	local lastFace = currentFace.lastFace
-	currentFace.lastFace = nil
-	currentFace = lastFace 
-end
-
-faceuse = function(name, paramstr)
-print'---faceuse-------------'print(name)
-	local fullname = N(name) print('fullname:',fullname)
-	if paramstr then print('params:', paramstr) end
-	currentFace.uses = currentFace.uses or {}
-	currentFace.uses[fullname] = true
-end
-
-special = function(fnname, paramstr)
-print'---special-------------'
-	local fn = specialFunctions[fnname]
-	if fn and type(fn)=='function' then
-		fn(paramstr)
-	end
-end
-
-faceopen = function(facename, ...)
-print'---faceopen-------------'print(facename, ...)
-	pushname(facename)
-	-- adds to the 'tag' context (this is different from the stack because one tag can enter multiple face levels)
-	table.insert(context, facename)
-	context.level = context.level + 1
-end
-
-facecontent = function(startpos, content, endpos)
-print'---facecontent-------------'
-	print('pos:', startpos, endpos)
-	currentFace.source = content
-end
-
-faceclose = function(...)
-print'---faceclose-------------'print(context[#context])print(context.level)
-	local facename = context[#context] or '_'
-	popname(facename)
-	table.remove(context, #context)
-	context.level = context.level - 1
-end
-
-
-local SPECIALFUNCTION = lpeg.P"${@" * lpeg.C(NAME) * lpeg.P"[" * lpeg.C(FACEUSENAME) * lpeg.P"]}" ^1 
-
-local OPENBRACKETS = lpeg.P"["^1 * lpeg.P"\n"^-1
-local OPENBRACES = lpeg.P"{"^1
-local CLOSEBRACES = lpeg.P"}"^1 -- TODO: add support for long braces
-local FACEDEFSTART = lpeg.P"${" * lpeg.Cg(FACENAME, 'facename') * OPENBRACKETS
-local FACEDEFEND = lpeg.P"]"^1 * "}" 
-
-local FACEUSESTART = lpeg.P"${" * lpeg.Cg(FACEUSENAME, 'faceusename') * OPENBRACES
-local FACEUSEEND = lpeg.P"}"^0 * "}" 
-
--- Face Use Parameters
 local SPACE = (WHITESPACE^0)
-
-local SIMPLEFACEUSE = lpeg.P"${" * lpeg.Cg(FACEUSENAME,'faceusename') * "}" 
 
 local STRING = (lpeg.P'"' * ( (lpeg.P'\\' * 1) + (1 - (lpeg.S'"\n\r\f')) )^0 * lpeg.P'"') +
   (lpeg.P"'" * ( (lpeg.P'\\' * 1) + (1 - (lpeg.S"'\n\r\f")) )^0 * lpeg.P"'")
 
-local LITERAL = STRING + NUMBER
+local LITERAL = SPACE * STRING * SPACE + SPACE * NUMBER * SPACE 
 
-local ATTR = FACEUSENAME * SPACE * "=" * SPACE * LITERAL
+local ATTR = SPACE * Cg(FACEUSENAME, 'name') * SPACE * "=" * SPACE * Cg(LITERAL, 'value') * SPACE
 
-local PARAMS = ATTR * ("," * ATTR)^0 
+local ARGUMENT = Ct(ATTR) + C(LITERAL)
 
-local PARAMFACEUSE = FACEUSESTART * lpeg.Cg(PARAMS, 'params') * CLOSEBRACES * "}" 
+local PARAMS = ARGUMENT * ("," * ARGUMENT)^0 
 
-local TEXT = lpeg.C((1-(FACEUSESTART+FACEUSEEND+FACEDEFSTART+FACEDEFEND))^1)
+local PARAMFACEUSE = P"${" * Cg(FACEUSENAME, 'tagname') * "{" * Cg(Ct(PARAMS), 'parameters') * "}" * "}" 
 
-s = [===[
 
-${a}
+local BRACES_TEXT = C((1-(BRACES_SIMPLEUSE + BRACES_OPENTAGDEF + BRACES_CLOSETAGDEF + PARAMFACEUSE + BRACES_SPECIALFUNCTION))^1)
+
+-- Grammar
+	
+local CONTENT, FACEUSE, FACEDEF, FACEFUNC, BRACES_FACEDEF =  V'CONTENT', V'FACEUSE', V'FACEDEF', V'FACEFUNC', V'BRACES_FACEDEF'
+
+local TEMPLATE = P{ CONTENT;
+	CONTENT = (FACEFUNC + FACEDEF + FACEUSE + BRACES_TEXT)^1,
+	FACEDEF = Ct(Cc(T_FACEDEF) * BRACES_FACEDEF),
+	FACEFUNC = Ct(Cc(T_FACEFUNC) * BRACES_SPECIALFUNCTION),
+	FACEUSE = Ct(Cc(T_FACEUSE) * (BRACES_SIMPLEUSE + PARAMFACEUSE)),
+	BRACES_FACEDEF = BRACES_OPENTAGDEF * CONTENT * BRACES_CLOSETAGDEF,
+}
+
+local function event(name)
+	local eventname = 'on'..tostring(name)
+	return function(opt)
+		if type(opt)=='function' then
+			_G[eventname] = opt
+		elseif type(opt)=='table' then
+			_G[eventname] = opt[1]
+		elseif type(opt)=='string' then
+			_G[eventname] = loadstring(fn)
+		end
+	end
+end
+
+local function fire(name, ...)
+	local eventname = 'on'..tostring(name)
+	return _G[eventname](name, ...)
+end
+
+local function createcontext(context, facename)
+	local ctx = {}
+	if string.sub(facename, 1, 1)=='_' then
+		facename = string.sub(facename, 2)
+	else
+		table.add(ctx, context)
+	end
+	table.add(ctx, string.split(facename,'.'))
+	return ctx
+end
+
+local function build(context, t)
+	if not t then
+		fire('error', context, 'Invalid face definition')
+	elseif type(t)~='table' then print('string')
+		return 'faceuse', t
+	elseif t[1]==T_FACEDEF then print('def')
+		local ctx =  createcontext(context, t.tagname) 
+		local res = {this=ctx, name=ctx[#ctx], decl={}, deps={}, tpl={}}
+		for i=2, #t do
+			local o=t[i]
+			
+			local kind, faceref = build(ctx, o)
+
+			if kind=='facedef' then
+				local name = table.concat(faceref,'.')
+				res.decl[name] = faceref
+				kind='faceuse'
+			end
+			if kind=='faceuse' then
+				if type(faceref)=='table' then
+					local name = table.concat(faceref,'.')
+					if not res.decl[name] then
+						res.deps[name] = faceref 
+					end
+				end
+				table.insert(res.tpl, faceref)
+			end
+			
+		end
+		return 'facedef', fire('facedef', res.this, res.name, res.decl, res.deps, res.tpl)
+	elseif t[1]==T_FACEUSE then print('use')
+		local ctx = createcontext(context, t.tagname) 
+		return 'faceuse', fire('faceuse', ctx, t.parameters)
+	elseif t[1]==T_FACEFUNC then
+		return '_', fire('parsespecial', context, t['function'], t.parameter)
+	end
+end
+
+function parse(options)
+	local context = options.context or {}
+	local facename = options.faceName
+	local content = options.content
+	
+	local result = {tagname=facename, TEMPLATE:match(content)}
+	
+	table.insert(result, 1, T_FACEDEF)
+	
+	event'facedef' {
+		options.onFaceDefinition or function(e, ctx, name, decl, deps, tpl)
+			return ctx
+		end
+	} 
+	
+	event'faceuse'{
+		options.onFaceUse or function(e, ctx, params)
+			return ctx
+		end
+	} 
+	
+	event'facerender'{
+		options.onFaceRender or function(e, ctx, tpl, params)
+			return {ctx, tpl, params}
+		end
+	} 
+	
+	event'parsespecial'{
+		options.onParseSpecial or function(e, ctx, fn, param)
+			return {ctx, fn, param}
+		end
+	} 
+
+	return build(context, result)
+end
+--[=[
+parse{
+	faceName='Main',
+	content = [[
 
 ${@context[a.b.c]} 
+${a}
+
 ${d[
 	isso é um teste, 
 	de um jeito ${e}
@@ -356,7 +340,6 @@ ${d[
 
 ]} 
 
-[=[ sss ]=] 
 
 ${@context[x]} 
 
@@ -364,46 +347,47 @@ ${y[
 	isso é um outro teste, ${e}
 	de um jeito 
 	bem legal
-	${z[
+	
+	${ze.yps[
 	Com mais um tipo de coisa
+		${x[
+			dentro demais ${corredor}
+		]}
+
+		${@context[celenterado]} 
+		
+		${x[
+			dentro demais ${corredor}
+		]}
+	
+		${wa.xi[
+			 Ultimate ${test}
+		]}
+
+		${_wa.xi[
+			 Ultimate ${test}
+		]}
+
 	]}
 ]}
 
 a
-${y{z=1}} -- not working
-${y}
+${y{z=1}}
+${y{a=324,b=234,z=1}}
+${y{1, 2, 3, 4, g=12}}
+${y{name="peteca no \nchão"}}
 
+${@context[a.b.c]} 
+${a}
 
-
-
-]===]
--- The grammar
-
-local TEMPLATE, FACEDEF, FACEUSE, CONTENT = lpeg.V'TEMPLATE', lpeg.V'FACEDEF', lpeg.V'FACEUSE', lpeg.V'CONTENT' 
-
-
-local TEMPLATE=lpeg.P{ TEMPLATE;
-	TEMPLATE =( FACEUSE + FACEDEF + TEXT )^1,
-	FACEDEF  = lpeg.Ct(FACEDEFSTART * TEMPLATE * FACEDEFEND),
-	FACEUSE  = SIMPLEFACEUSE + PARAMFACEUSE,
-}
-
-
-r = [==[ 
-
- ${ack}
-
-${y[
-	isso é um outro teste, ${ett}
-	de um jeito 
+${d[
+	isso é um teste, 
+	de um jeito ${e}
 	bem legal
-	${z[
-	Com mais um tipo de coisa
-	]}
-]} ]==]
 
+]} 
 
+]]
 
-
-t = {TEXT:match(r)}
-print_r(t)
+}
+]=]--

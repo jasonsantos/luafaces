@@ -1,7 +1,7 @@
-package.path = [[;;../../source/lua/5.1/?.lua;../../source/lua/5.1/?/init.lua;]]
+--package.path = [[;;../../source/lua/5.1/?.lua;../../source/lua/5.1/?/init.lua;]]
 
 local mask = require'luafaces.mask'
-
+require'util'
 -- simple functional masks
 
 mask.define'card' {
@@ -16,6 +16,6 @@ mask.define'naipe' {
 	end;
 }
 
-local t = mask.compile[[${card} of ${naipe}]]
-
-print(mask.render(t))
+local t = mask.define'Main' [[${card} of ${naipe}]]
+util.print_r(t)
+print(t:render())

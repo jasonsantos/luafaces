@@ -34,7 +34,7 @@ local luafaces = require"luafaces"
 
 luafaces.export(_G)
 
-Mask"html.select.cliente"Face[[
+Face"html.select.cliente" [[
 	${{item{
 	<option value="$id">$label</option>
 }}}

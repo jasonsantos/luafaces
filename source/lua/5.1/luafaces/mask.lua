@@ -1,8 +1,11 @@
-module('luafaces.mask', package.seeall)
+pcall(require,'luarocks.require')
+module(..., package.seeall)
 
 local mold = require'luafaces.mold'
 local braces = require "luafaces.syntax.braces"
 local tags = require "luafaces.syntax.tags"
+
+local tools = require "util"
 
 --[==[--
 A mask is a table
@@ -20,11 +23,11 @@ a template can be rendered.
 
 
 t = [[
-	${{name{Fulano de Tal}}}
+	${name[Fulano de Tal]}
 
-	${{option{
+	${option[
 		Fulano de Tal do tipo ${type}
-	}}}
+	]}
 
 
 	${name} renders the face called 'name'
@@ -35,23 +38,84 @@ t = [[
 --]==]--
 
 
+local build
+
 local function defineMask(maskstub, definition)
-	if type(maskstub)~= 'table' or not maskstub[1] then
-		error('Invalid definition call', 2)
+	if type(maskstub)~= 'table' or not maskstub['.faceName'] or not definition then
+		error('Invalid face definition', 2)
 	end
-	table.foreach(maskstub, print)
-	local mask = maskstub[1]
-print(mask)
-	local face = mold.repository[mask]
+table.foreach(maskstub, print)
+	local faceName = maskstub['.faceName']
+print(faceName)
+	local face = mold.repository[faceName]
 	if face then
-		mold.unregister(mask)
+		mold.unregister(faceName)
 	end
-	mold.register(mask, definition)
+	
+	if type(definition)=='string' then
+		definition = build(faceName, definition)
+	end
+	
+	return mold.register(faceName, definition)
 end
 
-function define(maskname)
-	return setmetatable( {maskname}, { __call=defineMask })
+function define(facename)
+	return setmetatable( {['.prototype']='face', ['.faceName']=facename }, { __call=defineMask })
 end
+
+build=function(facename, facedefinition)
+
+	local face_mt = {
+		__index=function(o, idx)
+			local f = mold.find(o)
+			return rawget(f,idx)
+		end
+	}
+
+	local options = {
+		faceName= facename,
+		content = facedefinition,
+		
+		onFaceDefinition = function(e, ctx, name, decl, deps, tpl)
+		print('>',e, unpack(ctx))
+			local faceName = table.concat(ctx, '.')
+			mold.register(faceName, {
+				['.prototype']	= 'face', 
+				['.faceName']	= faceName,
+				declarations 	= decl,
+				dependencies 	= deps,
+				template 		= tpl,
+				attributes 		= {},
+				render = function(data)
+					for _, item in ipairs(tpl) do
+						
+					end
+				end 
+			})
+			return setmetatable({unpack(ctx)}, face_mt)
+		end,
+		
+		onFaceUse = function(e, ctx, parameters)
+			-- TODO: unpack/compile parameters
+			print(e, ctx)
+			return {unpack(ctx), parameters=parameters}
+		end,
+		
+		onFaceRender = function(e, ctx, tpl, params)
+			
+		end,
+		
+		onParseSpecial = function(e, ctx, fn, param)
+		print(e, ctx)
+			if fn=='context' then
+				table.replace(ctx, string.split(param, '.'))
+			end		
+		end,
+	}
+	
+	local type, facedef = braces.parse(options)
+	return facedef
+end 
 
 function compile(template, t, r)
 	local txtTable = t or {}
@@ -75,16 +139,20 @@ end
 function render(tt,data, ...)
 	local t, r = tt.serial, tt.references
 
-	local t_text = {} --copies the txtTable (is it really necessary?)
-	for i, v in ipairs(t) do
-		table.insert(t_text, v)
-	end
+	local t_text = table.clone(t)
 
-	for key, var in pairs(r) do
+	for key, positions in pairs(r) do
+		-- TODO: treat the 'only from data' and 'only from faces' trigger
 		if data and data[key] then
-			for _, pos in ipairs(r[key]) do
+			for _, pos in ipairs(positions) do
 				local content = data[key]
-				t_text[pos] = type(content)=='function' and  content(...) or content
+				if type(content)=='function' then
+					t_text[pos] = content(...) 
+				elseif type(content)=='table' then -- data[key] is a table
+					-- TODO: repeat the pattern
+				else 
+					t_text[pos] = tostring(content)
+				end
 			end
 		end
 	end

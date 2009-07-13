@@ -1,5 +1,5 @@
 local mask = require'luafaces.mask'
-local mold= require'luafaces.mold'
+local mold = require'luafaces.mold'
 
 module('luafaces', package.seeall)
 

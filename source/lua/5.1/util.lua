@@ -1,15 +1,41 @@
-local string = string
-local setmetatable = setmetatable
-local error = error
-local io = io
-local type = type
-local tostring = tostring
-local next = next
-local pairs = pairs
+pcall('require','luarocks.require')
 
-require'lpeg'
+local lpeg = require'lpeg'
 
-module(...)
+module(..., package.seeall)
+
+function string.split (s, sep)
+  sep = lpeg.P(sep)
+  local elem = lpeg.C((1 - sep)^0)
+  local p = elem * (sep * elem)^0
+  return {lpeg.match(p, s)}
+end
+
+function table.add(t, a)
+	for i=1,#a do
+		table.insert(t,a[i])
+	end
+	return t
+end
+
+function table.clone(t)
+	local r = {}
+	for k,v in pairs(t) do
+		r[k]=v
+	end
+	return r
+end
+
+function table.replace(t, r)
+	local n = #r
+	for i=1,n do
+		t[i]=r[i]
+	end
+	for j=#t,n+1,-1 do 
+		table.remove(t,j)
+	end
+	return t
+end
 
 function print_r (t, name, indent)
   local tableList = {}
@@ -31,11 +57,4 @@ function print_r (t, name, indent)
                   or tostring(t),';\n') end
   end
   table_r(t,name or '__unnamed__',indent or '','')
-end
-
-function string.split (s, sep)
-  sep = lpeg.P(sep)
-  local elem = lpeg.C((1 - sep)^0)
-  local p = lpeg.Ct(elem * (sep * elem)^0)   -- make a table capture
-  return lpeg.match(p, s)
 end
