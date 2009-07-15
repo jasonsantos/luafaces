@@ -3,7 +3,7 @@ pcall('require','luarocks.require')
 local lpeg = require'lpeg'
 
 module(..., package.seeall)
-
+ 
 function string.split (s, sep)
   sep = lpeg.P(sep)
   local elem = lpeg.C((1 - sep)^0)

@@ -38,7 +38,78 @@ t = [[
 --]==]--
 
 
-local build
+local facestub_mt = {
+	__index=function(o, idx)
+		local f = mold.find(o)
+		return rawget(f,idx)
+	end
+}
+
+local function isFace(f)
+print'-----'
+if type(f)=='table' then
+print(f['.prototype'])
+	table.foreach( f, print)
+else
+	print(tostring(f))
+end
+	return f and f['.prototype']=='face' or false
+end
+
+local function faceDefHandler(e, ctx, name, decl, deps, tpl,renderfn)
+print('>',e, unpack(ctx))
+	local faceName = table.concat(ctx, '.')
+	mold.register(ctx, {
+		['.prototype']	= 'face', 
+		['.faceName']	= name,
+		['.fullContext']= ctx,
+		['.fullName']	= faceName,
+		declarations 	= decl,
+		dependencies 	= deps,
+		template 		= tpl,
+		attributes 		= {},
+		render = renderfn or function(data, res)
+			local r = res or {}
+			for _, item in ipairs(tpl) do
+				if isFace(item) then
+					item:render(data, r)
+				else
+					table.insert(r, tostring(item))
+				end
+			end
+			return not res and table.concat(r)
+		end 
+	})
+	return setmetatable({unpack(ctx)}, facestub_mt)
+end
+
+local function faceUseHandler(e, ctx, parameters)
+	-- TODO: unpack/compile parameters
+	print(e, ctx)
+	return {unpack(ctx), parameters=parameters}
+end
+
+local function parseSpecialHandler(e, ctx, fn, param)
+print(e, ctx)
+	if fn=='context' then
+		table.replace(ctx, string.split(param, '.'))
+	end		
+end
+
+local function build(facename, facedefinition)
+
+	local options = {
+		faceName= facename,
+		content = facedefinition,
+		
+		onFaceDefinition = faceDefHandler,
+		onFaceUse = faceUseHandler,
+		onParseSpecial = parseSpecialHandler,
+	}
+	
+	local type, faceref = braces.parse(options)
+	return faceref
+end 
 
 local function defineMask(maskstub, definition)
 	if type(maskstub)~= 'table' or not maskstub['.faceName'] or not definition then
@@ -54,68 +125,20 @@ print(faceName)
 	
 	if type(definition)=='string' then
 		definition = build(faceName, definition)
+	else
+		local ctx, name = braces.createcontext(definition.context, faceName)
+		definition = faceDefHandler('facedef',ctx, name, definition.declarations,definition.dependencies,definition.template,definition.render)
 	end
 	
-	return mold.register(faceName, definition)
+	return definition
 end
 
 function define(facename)
 	return setmetatable( {['.prototype']='face', ['.faceName']=facename }, { __call=defineMask })
 end
 
-build=function(facename, facedefinition)
 
-	local face_mt = {
-		__index=function(o, idx)
-			local f = mold.find(o)
-			return rawget(f,idx)
-		end
-	}
 
-	local options = {
-		faceName= facename,
-		content = facedefinition,
-		
-		onFaceDefinition = function(e, ctx, name, decl, deps, tpl)
-		print('>',e, unpack(ctx))
-			local faceName = table.concat(ctx, '.')
-			mold.register(faceName, {
-				['.prototype']	= 'face', 
-				['.faceName']	= faceName,
-				declarations 	= decl,
-				dependencies 	= deps,
-				template 		= tpl,
-				attributes 		= {},
-				render = function(data)
-					for _, item in ipairs(tpl) do
-						
-					end
-				end 
-			})
-			return setmetatable({unpack(ctx)}, face_mt)
-		end,
-		
-		onFaceUse = function(e, ctx, parameters)
-			-- TODO: unpack/compile parameters
-			print(e, ctx)
-			return {unpack(ctx), parameters=parameters}
-		end,
-		
-		onFaceRender = function(e, ctx, tpl, params)
-			
-		end,
-		
-		onParseSpecial = function(e, ctx, fn, param)
-		print(e, ctx)
-			if fn=='context' then
-				table.replace(ctx, string.split(param, '.'))
-			end		
-		end,
-	}
-	
-	local type, facedef = braces.parse(options)
-	return facedef
-end 
 
 function compile(template, t, r)
 	local txtTable = t or {}

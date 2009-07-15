@@ -17,5 +17,9 @@ mask.define'naipe' {
 }
 
 local t = mask.define'Main' [[${card} of ${naipe}]]
+
+
+
+
 util.print_r(t)
 print(t:render())

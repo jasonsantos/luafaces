@@ -241,12 +241,16 @@ local function fire(name, ...)
 	return _G[eventname](name, ...)
 end
 
-local function createcontext(context, facename)
+function createcontext(context, facename)
 	local ctx = {}
+	if type(context)=='string' then
+		context = string.split(context,'.')
+	end
+	 
 	if string.sub(facename, 1, 1)=='_' then
 		facename = string.sub(facename, 2)
 	else
-		table.add(ctx, context)
+		table.add(ctx, context or {})
 	end
 	table.add(ctx, string.split(facename,'.'))
 	return ctx
