@@ -37,6 +37,26 @@ function table.replace(t, r)
 	return t
 end
 
+function iterate(key, fn)
+	if type(key)=='string' then
+		string.gsub(key, "[.]?([^.]*)[.]?", fn)
+	elseif type(key)=='table' then
+		for _, itemName in ipairs(key) do
+			fn(itemName)
+		end
+	end
+end
+
+function choose(t, s)
+	local o = t or {}
+	
+	iterate(function(name)
+		o = o and o[name] 
+	end)
+	
+	return o
+end
+
 function print_r (t, name, indent)
   local tableList = {}
   function table_r (t, name, indent, full)

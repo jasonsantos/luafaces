@@ -68,11 +68,13 @@ local function faceDefHandler(e, ctx, name, decl, deps, tpl,renderfn)
 			for _, item in ipairs(tpl) do
 				if item ~= face then
 					if type(item)=='table' then
+						local content = util.choose(data, item)
+						--TODO: repeat the render with different data if the content is an array
+						--TODO: replace the face template with the content if the content is a string
 						if item.render then
-							local pos = #r
-							--TODO: repeat the render with different data
 							--TODO: use the data table
 							--TODO: load facefiles
+							local pos = #r
 							local s = item:render(data, r, renderfn, context)
 							if pos==#r and type(s)=='string' then
 								table.insert(r, s)								

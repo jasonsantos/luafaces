@@ -26,15 +26,7 @@ repository = repository or setmetatable({}, {
 	end
 })
 
-local function iterate(key, fn)
-	if type(key)=='string' then
-		string.gsub(key, "[.]?([^.]*)[.]?", fn)
-	elseif type(key)=='table' then
-		for _, itemName in ipairs(key) do
-			fn(itemName)
-		end
-	end
-end
+local iterate = util.iterate
 
 function register(key, obj)
 	local o = moldsRepository or {}
