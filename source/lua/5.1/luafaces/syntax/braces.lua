@@ -253,25 +253,25 @@ function createcontext(context, facename)
 		table.add(ctx, context or {})
 	end
 	table.add(ctx, string.split(facename,'.'))
-	return ctx
+	return ctx, ctx[#ctx]
 end
 
 local function build(context, t)
 	if not t then
 		fire('error', context, 'Invalid face definition')
-	elseif type(t)~='table' then print('string')
+	elseif type(t)~='table' then 
 		return 'faceuse', t
-	elseif t[1]==T_FACEDEF then print('def')
-		local ctx =  createcontext(context, t.tagname) 
-		local res = {this=ctx, name=ctx[#ctx], decl={}, deps={}, tpl={}}
+	elseif t[1]==T_FACEDEF then 
+		local ctx, name =  createcontext(context, t.tagname) 
+		local res = {this=ctx, name=name, decl={}, deps={}, tpl={}}
 		for i=2, #t do
 			local o=t[i]
 			
 			local kind, faceref = build(ctx, o)
 
 			if kind=='facedef' then
-				local name = table.concat(faceref,'.')
-				res.decl[name] = faceref
+				local fullName = table.concat(faceref,'.')
+				res.decl[fullName] = faceref
 				kind='faceuse'
 			end
 			if kind=='faceuse' then
@@ -286,7 +286,7 @@ local function build(context, t)
 			
 		end
 		return 'facedef', fire('facedef', res.this, res.name, res.decl, res.deps, res.tpl)
-	elseif t[1]==T_FACEUSE then print('use')
+	elseif t[1]==T_FACEUSE then 
 		local ctx = createcontext(context, t.tagname) 
 		return 'faceuse', fire('faceuse', ctx, t.parameters)
 	elseif t[1]==T_FACEFUNC then

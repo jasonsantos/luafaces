@@ -14,7 +14,7 @@ local print_r = util.print_r
 
 module'luafaces.mold'
 
-local moldsRepository = {} 
+local moldsRepository = moldsRepository or {} 
 
 repository = repository or setmetatable({}, {
 	__index = function(obj, key)
@@ -38,13 +38,15 @@ end
 
 function register(key, obj)
 	local o = moldsRepository or {}
+
 	iterate(key, function(itemName)
 		if itemName ~= "" then
 			o[itemName] = o[itemName] or setmetatable({}, {__mode='k'})
 			o = o[itemName]
 		end
 	end)
-	o.item = obj
+	o['.item'] = obj
+	
 	return obj
 end
 
@@ -57,7 +59,7 @@ function find(key)
 		end
 	end)
 		
-	return o and o.item or o
+	return o and o['.item'] or o
 end
 
 
