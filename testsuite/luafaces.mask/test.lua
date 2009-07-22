@@ -5,6 +5,8 @@ local mold = require'luafaces.mold'
 require'util'
 -- simple functional masks
 
+local _ = print
+
 mask.define'Main.card' {
 	render=function(face, data, r)
 		table.insert(r, [[Ace]])
@@ -20,3 +22,5 @@ mask.define'naipe' {
 local t = mask.define'Main' [[${card} of ${_naipe}]]
 
 assert(t:render()=='Ace of Spades')
+
+_(t.render{card="Jack", _naipe="Diamonds"})

@@ -50,7 +50,7 @@ end
 function choose(t, s)
 	local o = t or {}
 	
-	iterate(function(name)
+	iterate(s, function(name)
 		o = o and o[name] 
 	end)
 	

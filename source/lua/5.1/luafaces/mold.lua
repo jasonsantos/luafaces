@@ -8,7 +8,7 @@ local next = next
 local pairs = pairs
 local ipairs = ipairs
 
-require'util'
+local util = require'util'
 
 local print_r = util.print_r
 

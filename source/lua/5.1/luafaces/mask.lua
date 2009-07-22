@@ -68,10 +68,15 @@ local function faceDefHandler(e, ctx, name, decl, deps, tpl,renderfn)
 			for _, item in ipairs(tpl) do
 				if item ~= face then
 					if type(item)=='table' then
-						local content = util.choose(data, item)
+						local t = item;
+						print('t', #t)
+						table.foreach(t, print)
+						local content = util.choose(data, face['.fullContext'])
+						
+						print('content:', content)
 						--TODO: repeat the render with different data if the content is an array
 						--TODO: replace the face template with the content if the content is a string
-						if item.render then
+						if type(item.render)=='function' then
 							--TODO: use the data table
 							--TODO: load facefiles
 							local pos = #r
